@@ -4,35 +4,39 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.io.RowResult;
-import org.apache.hadoop.hbase.io.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
+
 import org.apache.hadoop.hbase.mapred.TableInputFormat;
 
 import org.apache.noggit.JSONUtil;
 
 public class JSONTableInputFormat extends TextTableInputFormat {
 
-    public String formatRowResult(RowResult row) {
+    public String formatRowResult(Result row) {
         return hasTimestamp() ? formatRowResultWithTimestamp(row) : formatRowResultWithoutTimestamp(row);
     }
 
-    public String formatRowResultWithTimestamp(RowResult row) {
-        Map<String, Map<String, String>> values = new HashMap<String, Map<String, String>>();
-        for (Map.Entry<byte[], Cell> entry : row.entrySet()) {
+    public String formatRowResultWithTimestamp(Result row) {
+        return formatResult(row, true);
+    }
+
+    public String formatRowResultWithoutTimestamp(Result row) {
+    	return formatResult(row, false);
+    }
+    
+    private String formatResult(Result row, boolean includeTimestamp){
+    	Map<String, Map<String, String>> values = new HashMap<String, Map<String, String>>();
+        for (KeyValue entry : row.list()) {
             Map<String, String> cell = new HashMap<String, String>();
-            cell.put("value", encodeValue(entry.getValue().getValue()));
-            cell.put("timestamp", String.valueOf(entry.getValue().getTimestamp()));
-            values.put(encodeColumnName(entry.getKey()), cell);
+            cell.put("value", encodeValue(entry.getValue()));
+            if(includeTimestamp)
+            	cell.put("timestamp", String.valueOf(entry.getTimestamp()));
+            
+            values.put(encodeColumnName(entry.getFamily(), entry.getQualifier()), cell);
         }
         return JSONUtil.toJSON(values);
     }
 
-    public String formatRowResultWithoutTimestamp(RowResult row) {
-        Map<String, String> values = new HashMap<String, String>();
-        for (Map.Entry<byte[], Cell> entry : row.entrySet()) {
-            values.put(encodeColumnName(entry.getKey()), encodeValue(entry.getValue().getValue()));
-        }
-        return JSONUtil.toJSON(values);
-    }
 
 }

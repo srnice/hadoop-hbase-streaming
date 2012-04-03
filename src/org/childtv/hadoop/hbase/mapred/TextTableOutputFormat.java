@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hadoop.mapred.JobConf;
@@ -13,7 +14,6 @@ import org.apache.hadoop.mapred.InvalidJobConfException;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.hbase.io.BatchUpdate;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapred.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Base64;
@@ -53,7 +53,7 @@ public abstract class TextTableOutputFormat
             || arg.equals("1");
     }
 
-    public abstract BatchUpdate[] createBatchUpdates(String key, String content);
+    public abstract Writable[] createBatchUpdates(String key, String content);
 
     public void checkOutputSpecs(FileSystem ignored, JobConf job)
         throws FileAlreadyExistsException, InvalidJobConfException, IOException {
@@ -65,13 +65,14 @@ public abstract class TextTableOutputFormat
     public RecordWriter<Text, Text>  getRecordWriter(FileSystem ignored, JobConf job, String name, Progressable progress)
         throws IOException {
         configure(job);
+        
         return new TextTableRecordWriter(outputFormat.getRecordWriter(ignored, job, name, progress));
     }
 
     protected class TextTableRecordWriter implements RecordWriter<Text, Text> {
-        private RecordWriter<ImmutableBytesWritable, BatchUpdate> tableRecordWriter;
+        private RecordWriter<ImmutableBytesWritable, Writable> tableRecordWriter;
 
-        public TextTableRecordWriter(RecordWriter<ImmutableBytesWritable, BatchUpdate> tableRecordWriter) {
+        public TextTableRecordWriter(RecordWriter<ImmutableBytesWritable, Writable> tableRecordWriter) {
             this.tableRecordWriter = tableRecordWriter;
         }
 
@@ -80,7 +81,7 @@ public abstract class TextTableOutputFormat
         }
 
         public void write(Text key, Text value) throws IOException {
-            for (BatchUpdate bu : createBatchUpdates(key.toString(), value.toString())) {
+            for (Writable bu : createBatchUpdates(key.toString(), value.toString())) {
                 tableRecordWriter.write(null, bu);
             }
         }

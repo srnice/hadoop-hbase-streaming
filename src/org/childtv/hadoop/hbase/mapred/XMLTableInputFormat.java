@@ -12,17 +12,17 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-import org.apache.hadoop.hbase.io.RowResult;
-import org.apache.hadoop.hbase.io.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.mapred.TableInputFormat;
 
 public class XMLTableInputFormat extends TextTableInputFormat {
 
-    public String formatRowResult(RowResult row) {
+    public String formatRowResult(Result row) {
         return toString(createDocument(row));
     }
 
-    private Document createDocument(RowResult rowResult) {
+    private Document createDocument(Result rowResult) {
         Document document = null;
         try {
             document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
@@ -31,7 +31,7 @@ public class XMLTableInputFormat extends TextTableInputFormat {
         Element row = document.createElement("row");
         document.appendChild(row);
 
-        for (Map.Entry<byte[], Cell> entry : rowResult.entrySet()) {
+        for (KeyValue entry : rowResult.list()) {
             Element column = document.createElement("column");
             row.appendChild(column);
 
@@ -40,12 +40,12 @@ public class XMLTableInputFormat extends TextTableInputFormat {
             column.appendChild(name);
 
             Element value = document.createElement("value");
-            value.appendChild(document.createTextNode(encodeValue(entry.getValue().getValue())));
+            value.appendChild(document.createTextNode(encodeValue(entry.getValue())));
             column.appendChild(value);
 
             if (hasTimestamp()) {
                 Element timestamp = document.createElement("timestamp");
-                timestamp.appendChild(document.createTextNode(String.valueOf(entry.getValue().getTimestamp())));
+                timestamp.appendChild(document.createTextNode(String.valueOf(entry.getTimestamp())));
                 column.appendChild(timestamp);
             }
         }

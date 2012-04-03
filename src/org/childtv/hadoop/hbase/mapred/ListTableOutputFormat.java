@@ -16,10 +16,16 @@
 
 package org.childtv.hadoop.hbase.mapred;
 
+import java.util.Date;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.hbase.io.BatchUpdate;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.regionserver.DeleteTracker.DeleteCompare;
+import org.apache.hadoop.io.Writable;
+
+import com.sun.corba.se.impl.ior.WireObjectKeyTemplate;
 
 public class ListTableOutputFormat extends TextTableOutputFormat {
 
@@ -36,37 +42,57 @@ public class ListTableOutputFormat extends TextTableOutputFormat {
             separator = DEFAULT_SEPARATOR;
     }
 
-    public BatchUpdate[] createBatchUpdates(String command, String argsString) {
+    public Writable[] createBatchUpdates(String command, String argsString) {
         String[] args = argsString.split(Pattern.quote(separator), -1);
-        BatchUpdate bu = new BatchUpdate(args[0]);
+        Writable bu; //= new BatchUpdate(args[0]);
         try {
             if (command.equals("put")) {
-                put(bu, args);
+            	Put put = new Put(decodeValue(args[0]) ); 
+            	bu = put;
+                put(put, args);
             } else if (command.equals("delete")) {
-                delete(bu, args);
+            	Delete delete = new Delete(decodeValue(args[0]));
+            	bu = delete;
+                delete(delete, args);
             } else {
                 throw new RuntimeException();
             }
         } catch(Exception e) {
+        	e.printStackTrace();
             throw new RuntimeException(String.format("ListTableOutputFormat - invalid reduce output: %s / %s", command, argsString));
+            
         }
-        return new BatchUpdate[] { bu };
+        return new Writable[] { bu };
     }
 
-    private void put(BatchUpdate bu, String[] args) {
-        bu.put(decodeColumnName(args[1]), decodeValue(args[2]));
-        if (args.length > 3) setTimestampString(bu, args[3]);
+    private void put(Put bu, String[] args) {
+    	// TODO - Fix column qualifier
+    
+        if (args.length > 3)
+        	bu.add(decodeColumnName(args[1]), getTimestampString(args[3]),  decodeValue(args[2]));
+        else
+        	// Verify this is default behavior
+        	bu.add(decodeColumnName(args[1]), new Date().getTime(),  decodeValue(args[2]));
     }
 
-    private void delete(BatchUpdate bu, String[] args) {
-        bu.delete(decodeColumnName(args[1]));
-        if (args.length > 2) setTimestampString(bu, args[2]);
+    private void delete(Delete bu, String[] args) {
+    	//TODO - check column qualifier
+        
+        if (args.length > 2) 
+        	bu.deleteColumns(decodeColumnName(args[1]), getTimestampString(args[2]));	
+        else 
+        	bu.deleteColumn(decodeColumnName(args[1]));
+        
     }
 
-    private void setTimestampString(BatchUpdate bu, String ts) {
+    private long getTimestampString(String ts) {
         try {
-            bu.setTimestamp(Long.parseLong(ts));
-        } catch(NumberFormatException e) {}
+            return Long.parseLong(ts);
+        } catch(NumberFormatException e) {
+        	return new Date().getTime(); // TODO CHECK THAT THIS IS DEFAULT BEHAVIOR
+        }
+        
     }
+    
 
 }

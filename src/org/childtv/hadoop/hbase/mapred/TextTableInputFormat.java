@@ -1,6 +1,7 @@
 package org.childtv.hadoop.hbase.mapred;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -13,8 +14,8 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobConfigurable;
 import org.apache.hadoop.mapred.FileInputFormat;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.RowResult;
 import org.apache.hadoop.hbase.mapred.TableInputFormat;
 import org.apache.hadoop.hbase.util.Base64;
 
@@ -47,7 +48,25 @@ public abstract class TextTableInputFormat
 
     protected String encodeColumnName(byte[] key) {
         return isBinary() ? Base64.encodeBytes(key) : new String(key);
+    
     }
+    
+    protected String encodeColumnName(byte[] family, byte[] qualifier) {
+    
+    	int resultSize =  family.length + 1 + qualifier.length;
+    	ByteBuffer bb = ByteBuffer.allocate(resultSize);
+    	
+    	bb.put(family);
+    	bb.put(":".getBytes());
+    	bb.put(qualifier);
+    	
+    	byte [] joinedOutput = bb.array();
+    	
+    
+        return isBinary() ? Base64.encodeBytes(joinedOutput) : new String(joinedOutput); 
+        	//new String(family) + ":" + new String(qualifier);
+    }
+    
     protected String encodeValue(byte[] value) {
         return isBinary() ? Base64.encodeBytes(value) : new String(value);
     }
@@ -72,12 +91,12 @@ public abstract class TextTableInputFormat
         return new TextTableRecordReader(inputFormat.getRecordReader(split, job, reporter));
     }
 
-    public abstract String formatRowResult(RowResult row);
+    public abstract String formatRowResult(Result row);
 
     protected class TextTableRecordReader implements RecordReader<Text, Text> {
-        private RecordReader<ImmutableBytesWritable, RowResult> tableRecordReader;
+        private RecordReader<ImmutableBytesWritable, Result> tableRecordReader;
 
-        public TextTableRecordReader(RecordReader<ImmutableBytesWritable, RowResult> reader) {
+        public TextTableRecordReader(RecordReader<ImmutableBytesWritable, Result> reader) {
             tableRecordReader = reader;
         }
 
@@ -102,7 +121,7 @@ public abstract class TextTableInputFormat
         }
 
         public boolean next(Text key, Text value) throws IOException {
-            RowResult row = new RowResult();
+            Result row = new Result();
             boolean hasNext = tableRecordReader.next(new ImmutableBytesWritable(key.getBytes()), row);
             if (hasNext) {
                 key.set(row.getRow());

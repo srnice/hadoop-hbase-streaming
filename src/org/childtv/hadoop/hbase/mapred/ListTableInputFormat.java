@@ -1,8 +1,8 @@
 package org.childtv.hadoop.hbase.mapred;
 
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.hbase.io.RowResult;
-import org.apache.hadoop.hbase.io.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.mapred.TableInputFormat;
 
 public class ListTableInputFormat extends TextTableInputFormat {
@@ -23,9 +23,9 @@ public class ListTableInputFormat extends TextTableInputFormat {
     public String getValueSeparator() { return valueSeparator; }
 
 
-    public String formatRowResult(RowResult row) {
+    public String formatRowResult(Result row) {
         StringBuilder values = new StringBuilder("");
-        for (Cell cell : row.values()) {
+        for (KeyValue cell : row.list()) {
             if (values.length() != 0)
                 values.append(getValueSeparator());
             values.append(encodeValue(cell.getValue()));

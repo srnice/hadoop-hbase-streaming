@@ -17,7 +17,8 @@
 package org.childtv.hadoop.hbase.mapred;
 
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.hbase.io.BatchUpdate;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.io.Writable;
 
 public class PutTableOutputFormat extends TextTableOutputFormat {
 
@@ -34,21 +35,24 @@ public class PutTableOutputFormat extends TextTableOutputFormat {
             separator = DEFAULT_SEPARATOR;
     }
 
-    public BatchUpdate[] createBatchUpdates(String key, String content) {
+    public Writable[] createBatchUpdates(String key, String content) {
         String[] values = content.split(separator, 3);
         if (values.length < 2)
             throw new RuntimeException("PutTableOutputFormat: invalid reduce output: " + content);
 
         
-        BatchUpdate bu = new BatchUpdate(key);
-        bu.put(decodeColumnName(values[0]), decodeValue(values[1]));
+        Put bu = new Put(decodeValue(key));
+        
         if (values.length >= 3) {
-            try {
-                bu.setTimestamp(Long.parseLong(values[2]));
+        	try {
+        	bu.add(decodeColumnName(values[0]), Long.parseLong(values[2]),  decodeValue(values[1]));
+           
             } catch(NumberFormatException e) {}
+        } else {
+        	bu.add(decodeColumnName(values[0]), Long.parseLong(values[2]),  decodeValue(values[1]));
         }
         
-        return new BatchUpdate[] { bu };
+        return new Writable[] { bu };
     }
 
 }
