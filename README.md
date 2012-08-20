@@ -1,79 +1,106 @@
 Initial Setup
 =============
 
-All instructions pertain to CDH3u3 on CentOS 6.
+All instructions are only tested on CDH4.0.1 on Ubuntu 12.04 LTS, and the code uses older API, namely pre v0.20 with org.apache.hadoop.hbase.mapred package.
 
-Place hadoop-hbase-streaming.jar in /usr/local/hadoop-hbase-streaming.jar
+Build example:
+```
+HADOOP_MAPREDUCE_HOME=/usr/lib/hadoop-0.20-mapreduce/ HADOOP_HOME=/usr/lib/hadoop HBASE_HOME=/usr/lib/hbase ant
+```
+The output hadoop-hbase-streaming.jar is located at build/ directory 
 
-Add to :  /etc/hadoop-0.20/conf/hadoop-env.sh
+There is no need to set the classpath, since the jar file we build can be loaded by -jars options when submitting the job.
 
-	export HADOOP_CLASSPATH="/usr/local/hadoop-hbase-streaming.jar:$HADOOP_CLASSPATH"
-	export HADOOP_CLASSPATH="/usr/lib/hbase/lib/guava-r06.jar:$HADOOP_CLASSPATH"
-	export HADOOP_CLASSPATH="/usr/lib/hbase/hbase-0.90.4-cdh3u3.jar:$HADOOP_CLASSPATH"
-	export HADOOP_CLASSPATH="/usr/lib/zookeeper/zookeeper-3.3.4-cdh3u3.jar:$HADOOP_CLASSPATH" 
+Example with Reading and Writing to HBase
+=========================================
 
-Loading Data into HBase
-=======================
+This example demonstrates the frequency counter to web page visit logs, similar to
+http://sujee.net/tech/articles/hadoop/hbase-map-reduce-freq-counter/
 
-Create the output table with appropriate column families:
+First create the visit log table as follows:
+```
+create 'visit', {NAME=>'details'}
+```
+and the counter table as follows:
+```
+create 'counter', {NAME=>'details'}
+```
 
-	create 'outputtable', {NAME=>'cf1'}, {NAME=>'cf2'}
+Second, add some entries to the visit log table:
+```
+put 'visit', 'user1_1', 'details:page', '/'
+put 'visit', 'user1_2', 'details:page', '/a.html'
+put 'visit', 'user2_3', 'details:page', '/b.html'
+put 'visit', 'user3_4', 'details:page', '/a.html'
+put 'visit', 'user3_5', 'details:page', '/a.html'
+put 'visit', 'user2_6', 'details:page', '/a.html'
+put 'visit', 'user1_7', 'details:page', '/a.html'
+```
 
-Create a reducer that will output in the following format (tab-delimited):
+Note that the row key is a combination of user id and sequence number.
 
-	put	<rowid>	<cf>:<qualifier>	<value>
+Third, run the map/reduce job with map.py and reduce.py located on the base directory of the project:
+```
+hadoop jar /usr/lib/hadoop-0.20-mapreduce/contrib/streaming/hadoop-streaming-2.0.0-mr1-cdh4.0.1.jar \
+  -files map.py,reduce.py \
+  -libjars build/hadoop-hbase-streaming.jar,/usr/lib/hbase/hbase.jar \
+  -D map.input.table=visit -D map.input.columns=details -D map.input.timestamp=1 -D map.input.binary=0 \
+  -D reduce.output.table=counter \
+  -input dummy_input -inputformat org.childtv.hadoop.hbase.mapred.JSONTableInputFormat \
+  -output dummy_output -outputformat org.childtv.hadoop.hbase.mapred.ListTableOutputFormat \
+  -mapper map.py -reducer reduce.py
+```
 
-Run your map reduce job with the OutputFormat set to: org.childtv.hadoop.hbase.mapred.ListTableOutputFormat
+The options used here are explained as follows:
+* -files, upload the python scripts for mapper and reducer.
+* -libjars, upload and include the jar files for streaming, including the compiled jar file.
+* -input, with the custom inputformat class, the input directory can be arbitrary and even non-exist.
+* -inputformat, the class that will output to the mapper with rows as tab-delimited key and JSON string of the columns, for example:
+```
+user1_2	{"details:page":{"timestamp":123456789, "value":"/a.html"}}
+```
+* -output, with the custom outputformat class, the output directory can be arbitrary and even already exist.
+* -outputformat, the class that will parse the output of the reducer and update the HBase table, for example:
+```
+put	user1_/a.html	details:count	2
+```
+  The above tab-delimited output will update the counter table at row "user1_/a.html" with column "details:count" as 2, meaning that user1 visit /a.html twice.
+  The outputformat class also accept deletion output like:
+```
+delete	user1_/a.html	details:count
+```
+* -D, additional options for the input and output format classes, listed in the next section
+    
+Finally, the results are saved to counter table:
+```
+ROW                            COLUMN+CELL                                                                            
+ user1_/                       column=details:count, timestamp=1345450822130, value=1                                 
+ user1_/a.html                 column=details:count, timestamp=1345450822133, value=2                                 
+ user2_/a.html                 column=details:count, timestamp=1345450822133, value=1                                 
+ user2_/b.html                 column=details:count, timestamp=1345450822133, value=1                                 
+ user3_/a.html                 column=details:count, timestamp=1345450822133, value=2  
+```
 
-As a test, create a file called source_input/test.tab and include the expected reducer output.  
+Classes and Options
+===================
 
-An example of the reducer output might be (tab-delimited): 
+List of InputFormat classes:
+* JSONTableInputFormat, output JSON string for columns
+* XMLTableInputFormat, output XML string for columns
+* ListTableInputFormat, output columns in strings separated by spaces or use-defined characters
 
-	put	r1	cf1:test	Value1
-	put	r1	cf2:test	Value2
-	put	r2	cf1:test	Value3 
+List of InputFormat options:
+* map.input.table, the input table
+* map.input.columns, space delimated list of columns
+* map.input.timestamp, if it is true/yes/on/1, the returned column data will include timestamps
+* map.input.isbinary, if it is true/yes/on/1, the returned data will be treated as binary data and encoded in base64
+* map.input.value.separator, only used by ListTableInputFormat, separator for the returned column data, default is a space
 
-Then invoke the hadoop streaming API with the outputformat set to  org.childtv.hadoop.hbase.mapred.ListTableOutputFormat and the job configuration parameter reduce.output.table=outputtable 
+List of OutputFormat classes:
+* ListTableOutputFormat, accept both update and deletion
+* PutTableOutputFormat, only update rows, not delete
 
-	hadoop jar  /usr/lib/hadoop-0.20/contrib/streaming/hadoop-streaming-0.20.2-cdh3u3.jar \
-		-input source_input -output dummy_output \
-		-mapper /bin/cat \
-		-outputformat org.childtv.hadoop.hbase.mapred.ListTableOutputFormat \
-		-jobconf reduce.output.table=outputtable 
-
-This will write the provided fields to HBase.
-
-
-Extracting Data from HBase
-==========================
-
-For reading from hbase, create a dummy input directory containing no files.
-
-	mkdir dummy_input
-
-Select your desired InputFormat.  Two exist :
-JSON: org.childtv.hadoop.hbase.mapred.JSONTableInputFormat
-Tabular values: org.childtv.hadoop.hbase.mapred.ListTableInputFormat
-
-Select you desired input column families using the job configuration parameter map.input.columns
-
-The JSON format has the advantage that the format is stricter and more expressive.  
-
-	r1	{"cf2:test":{"timestamp":"1333428648468","value":"Value1"},"cf1:test":{"timestamp":"1333428678724","value":"Value2"}} 
-	r2	{"cf2:test":{"timestamp":"1333428656033","value":"Value3"},"cf1:test":{"timestamp":"1333428660721","value":"Value4"}} 
-
-The ListTableInputFormat only includes rowid and value.  It does not include column names in any way.
-
-	r1	Value1 Value2
-	r2	Value3 Value4
-
-To run a test job on an HBase table called sourcetable with column families cf1 and cf2 and run:
-
-	hadoop jar /usr/lib/hadoop-0.20/contrib/streaming/hadoop-streaming-0.20.2-cdh3u3.jar \
-		-input dummy_input -inputformat org.childtv.hadoop.hbase.mapred.JSONTableInputFormat \
-		-mapper /bin/cat \
-		-jobconf map.input.table=sourcetable -jobconf "map.input.columns=cf1 cf2" \
-		-output myoutput 
-
-This will produce a file in myoutput/part-00000 that contains the JSON output.
+List of OutputFormat options:
+* reduce.output.table, the output table
+* reduce.output.isbinary, if it is true/yes/on/1, the data will be treated as binary data and decoded in base64
 
