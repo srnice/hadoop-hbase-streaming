@@ -45,11 +45,13 @@ public class PutTableOutputFormat extends TextTableOutputFormat {
         
         if (values.length >= 3) {
         	try {
-        	bu.add(decodeColumnName(values[0]), Long.parseLong(values[2]),  decodeValue(values[1]));
+            String[] names = values[0].split(":", 2);
+        	  bu.add(decodeColumnName(names[0]), decodeColumnName(names[1]), Long.parseLong(values[2]),  decodeValue(values[1]));
            
             } catch(NumberFormatException e) {}
         } else {
-        	bu.add(decodeColumnName(values[0]), Long.parseLong(values[2]),  decodeValue(values[1]));
+            String[] names = values[0].split(":", 2);
+        	  bu.add(decodeColumnName(names[0]), decodeColumnName(names[1]), Long.parseLong(values[2]),  decodeValue(values[1]));
         }
         
         return new Writable[] { bu };

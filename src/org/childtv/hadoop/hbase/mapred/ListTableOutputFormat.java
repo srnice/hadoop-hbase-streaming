@@ -46,11 +46,11 @@ public class ListTableOutputFormat extends TextTableOutputFormat {
         String[] args = argsString.split(Pattern.quote(separator), -1);
         Writable bu; //= new BatchUpdate(args[0]);
         try {
-            if (command.equals("put")) {
+            if (command.toLowerCase().equals("put")) {
             	Put put = new Put(decodeValue(args[0]) ); 
             	bu = put;
                 put(put, args);
-            } else if (command.equals("delete")) {
+            } else if (command.toLowerCase().equals("delete")) {
             	Delete delete = new Delete(decodeValue(args[0]));
             	bu = delete;
                 delete(delete, args);
@@ -58,30 +58,36 @@ public class ListTableOutputFormat extends TextTableOutputFormat {
                 throw new RuntimeException();
             }
         } catch(Exception e) {
-        	e.printStackTrace();
-            throw new RuntimeException(String.format("ListTableOutputFormat - invalid reduce output: %s / %s", command, argsString));
+            System.err.println(String.format("ListTableOutputFormat - invalid reduce output: %s / %s", command, argsString));
+            e.printStackTrace();
+            // throw new RuntimeException(String.format("ListTableOutputFormat - invalid reduce output: %s / %s", command, argsString));
+            return new Writable[0];
             
         }
         return new Writable[] { bu };
     }
 
     private void put(Put bu, String[] args) {
-    	// TODO - Fix column qualifier
-    
-        if (args.length > 3)
-        	bu.add(decodeColumnName(args[1]), getTimestampString(args[3]),  decodeValue(args[2]));
-        else
-        	// Verify this is default behavior
-        	bu.add(decodeColumnName(args[1]), new Date().getTime(),  decodeValue(args[2]));
+        if (args.length > 3) {
+            String[] names = args[1].split(":", 2);
+            bu.add(decodeColumnName(names[0]), decodeColumnName(names[1]), getTimestampString(args[3]),  decodeValue(args[2]));
+        }
+        else {
+            // Verify this is default behavior
+            String[] names = args[1].split(":", 2);
+            bu.add(decodeColumnName(names[0]), decodeColumnName(names[1]), new Date().getTime(),  decodeValue(args[2]));
+        }
     }
 
     private void delete(Delete bu, String[] args) {
-    	//TODO - check column qualifier
-        
-        if (args.length > 2) 
-        	bu.deleteColumns(decodeColumnName(args[1]), getTimestampString(args[2]));	
-        else 
-        	bu.deleteColumn(decodeColumnName(args[1]));
+        if (args.length > 2) { 
+            String[] names = args[1].split(":", 2);
+            bu.deleteColumns(decodeColumnName(names[0]), decodeColumnName(names[1]), getTimestampString(args[2]));	
+        }
+        else {
+            String[] names = args[1].split(":", 2);
+            bu.deleteColumn(decodeColumnName(names[0]), decodeColumnName(names[1]));
+        }
         
     }
 
